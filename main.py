@@ -11610,4 +11610,8 @@ async def main():
         polling.cancel()
 
 if __name__ == "__main__":
+    import os
+    if os.path.exists('/tmp/signals_database.json'):
+        os.remove('/tmp/signals_database.json')
+        print("Старая БД удалена")
     asyncio.run(main())
