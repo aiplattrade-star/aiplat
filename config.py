@@ -18,7 +18,7 @@ VIP_PUMP_CHAT_ID = os.getenv('VIP_PUMP_CHAT_ID', '')
 
 UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', 300))       # 15 минут для основного анализа
 PUMP_SCAN_INTERVAL = int(os.getenv('PUMP_SCAN_INTERVAL', 30))  # 30 секунд для памп-сканера
-MIN_CONFIDENCE = int(os.getenv('MIN_CONFIDENCE', 55))
+MIN_CONFIDENCE = int(os.getenv('MIN_CONFIDENCE', 72))
 TIMEFRAME = os.getenv('TIMEFRAME', '15m')
 PAIRS_TO_SCAN = int(os.getenv('PAIRS_TO_SCAN', 30))            # Было 50
 
@@ -961,7 +961,7 @@ TF_ALIGNMENT_SETTINGS = {
     'enabled': True,
     
     # Режимы: 'strict', 'normal', 'loose', 'info', 'off'
-    'regular_mode': 'info',        # для обычных LONG/SHORT
+    'regular_mode': 'normal',        # для обычных LONG/SHORT
     'accumulation_mode': 'normal', # для накопления
     'pump_mode': 'info',           # для памп-дамп
     
@@ -1002,6 +1002,9 @@ TF_ALIGNMENT_SETTINGS = {
     
     # Режим INFO: отправлять все сигналы
     'send_all_in_info_mode': True,
+    'send_on_perfect': True,   # отправлять при perfect согласованности
+    'send_on_warning': True,   # отправлять при warning
+    'send_on_rejected': False, # НЕ отправлять при rejected
 }
 
 # ============== НАСТРОЙКИ ОЦЕНКИ СИЛЫ ТРЕНДА ==============
@@ -1556,4 +1559,12 @@ ENTRY_ZONES_GUARANTEED = {
     'tf_map': {
         '15m': 'current', '1h': 'hourly', '4h': 'four_hourly', '1d': 'daily', '1w': 'weekly',
     }
+}
+
+# ===== НАСТРОЙКИ СИСТЕМЫ ГОЛОСОВАНИЯ =====
+VOTING_SETTINGS = {
+    'enabled': True,
+    'min_vote_diff': 2,        # минимальное преимущество голосов (2 = нужно на 2 больше)
+    'conflict_penalty': 15,    # штраф confidence при конфликте direction и голосов
+    'min_total_votes': 3,      # минимум всего голосов для сигнала
 }
