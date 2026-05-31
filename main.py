@@ -6147,6 +6147,10 @@ class MultiTimeframeAnalyzer:
         direction = 'NEUTRAL'
         signal_type = 'regular'
 
+        # ===== СИСТЕМА ГОЛОСОВАНИЯ LONG vs SHORT =====
+        long_votes = 0   # счётчик подтверждений LONG
+        short_votes = 0  # счётчик подтверждений SHORT
+
         horizontal_levels = []
 
         # ===== ORDER BLOCKS НА СТАРШИХ ТАЙМФРЕЙМАХ (1ч, 4ч, 1д) =====
@@ -6309,26 +6313,32 @@ class MultiTimeframeAnalyzer:
             if last['rsi'] < INDICATOR_SETTINGS['rsi_oversold']:
                 reasons.append(f"RSI перепродан ({last['rsi']:.1f})")
                 confidence += INDICATOR_WEIGHTS['rsi']
+                long_votes += 1  # RSI голосует за LONG
             elif last['rsi'] > INDICATOR_SETTINGS['rsi_overbought']:
                 reasons.append(f"RSI перекуплен ({last['rsi']:.1f})")
                 confidence += INDICATOR_WEIGHTS['rsi']
+                short_votes += 1  # RSI голосует за SHORT
         
         # ===== MACD =====
         if pd.notna(last['MACD_12_26_9']) and pd.notna(last['MACDs_12_26_9']):
             if last['MACD_12_26_9'] > last['MACDs_12_26_9'] and prev['MACD_12_26_9'] <= prev['MACDs_12_26_9']:
                 reasons.append("Бычье пересечение MACD")
                 confidence += INDICATOR_WEIGHTS['macd']
+                long_votes += 1  # MACD голосует за LONG
             elif last['MACD_12_26_9'] < last['MACDs_12_26_9'] and prev['MACD_12_26_9'] >= prev['MACDs_12_26_9']:
                 reasons.append("Медвежье пересечение MACD")
                 confidence += INDICATOR_WEIGHTS['macd']
+                short_votes += 1  # MACD голосует за SHORT
         
         # ===== EMA =====
         if last['ema_9'] > last['ema_21'] and prev['ema_9'] <= prev['ema_21']:
             reasons.append("Бычье пересечение EMA (9/21)")
             confidence += INDICATOR_WEIGHTS['ema_cross_current']
+            long_votes += 1  # EMA голосует за LONG
         elif last['ema_9'] < last['ema_21'] and prev['ema_9'] >= prev['ema_21']:
             reasons.append("Медвежье пересечение EMA (9/21)")
             confidence += INDICATOR_WEIGHTS['ema_cross_current']
+            short_votes += 1  # EMA голосует за SHORT
         
         # ===== ОБЪЕМ =====
         if last['volume_ratio'] > 1.5:
@@ -6354,9 +6364,37 @@ class MultiTimeframeAnalyzer:
             else:
                 vwap_formatted = f"{vwap_value:.2f}"
             
-            reasons.append(f"Цена {'выше' if price > vwap_value else 'ниже'} VWAP ({vwap_formatted})")
-            confidence += 10
+            # VWAP: даём бонус только при пересечении, не просто за положение
+            prev_price = df['close'].iloc[-2] if len(df) > 1 else price
+            prev_vwap = df['vwap'].iloc[-2] if len(df) > 1 else vwap_value
+            if prev_price < prev_vwap and price > vwap_value:
+                # Цена пробила VWAP вверх — сигнал LONG
+                reasons.append(f"📈 Пробой VWAP вверх ({vwap_formatted})")
+                confidence += INDICATOR_WEIGHTS['vwap']
+                long_votes += 1
+            elif prev_price > prev_vwap and price < vwap_value:
+                # Цена пробила VWAP вниз — сигнал SHORT
+                reasons.append(f"📉 Пробой VWAP вниз ({vwap_formatted})")
+                confidence += INDICATOR_WEIGHTS['vwap']
+                short_votes += 1
+            else:
+                # Просто информация — без бонуса к confidence
+                reasons.append(f"Цена {'выше' if price > vwap_value else 'ниже'} VWAP ({vwap_formatted})")
         
+        # ===== ФИЛЬТР ТРЕНДА ПО EMA50 НА 4-ЧАСОВОМ ТФ =====
+        # Лонги только если цена выше EMA50 на 4h, шорты только ниже
+        df_4h = dataframes.get('four_hourly')
+        if df_4h is not None and not df_4h.empty and 'ema_50' in df_4h.columns:
+            ema50_4h = df_4h['ema_50'].iloc[-1]
+            current_price = last['close']
+            if pd.notna(ema50_4h):
+                if current_price > ema50_4h:
+                    long_votes += 1  # Цена выше EMA50 на 4h = бычий контекст
+                    logger.info(f"  ✅ Цена выше EMA50 на 4h ({ema50_4h:.4f}) — бычий контекст")
+                else:
+                    short_votes += 1  # Цена ниже EMA50 на 4h = медвежий контекст
+                    logger.info(f"  ✅ Цена ниже EMA50 на 4h ({ema50_4h:.4f}) — медвежий контекст")
+
         # ===== СИГНАЛЫ ОТ СТАРШИХ ТАЙМФРЕЙМОВ =====
         for signal in alignment['signals']:
             reasons.append(signal)
@@ -7861,6 +7899,37 @@ class MultiTimeframeAnalyzer:
         if accumulation_analysis:
             result['accumulation'] = accumulation_analysis        
         
+        # ===== ФИНАЛЬНАЯ ПРОВЕРКА СИСТЕМЫ ГОЛОСОВАНИЯ =====
+        vote_diff = abs(long_votes - short_votes)
+        
+        # Требуем минимум 2 голоса преимущества для сигнала
+        if vote_diff < 2:
+            logger.info(f"  ⏭️ {symbol} - Голосование неопределённо: LONG={long_votes} SHORT={short_votes} (разница < 2)")
+            return None
+        
+        # Определяем итоговое направление по голосам
+        votes_direction = 'LONG' if long_votes > short_votes else 'SHORT'
+        
+        # Если direction уже установлен — проверяем согласованность с голосами
+        if direction != 'NEUTRAL' and direction != votes_direction:
+            if 'LONG' in direction and votes_direction == 'SHORT':
+                logger.info(f"  ⚠️ {symbol} - Конфликт: direction={direction} но голоса за SHORT ({long_votes}L/{short_votes}S)")
+                # Штрафуем confidence при конфликте
+                confidence -= 15
+            elif 'SHORT' in direction and votes_direction == 'LONG':
+                logger.info(f"  ⚠️ {symbol} - Конфликт: direction={direction} но голоса за LONG ({long_votes}L/{short_votes}S)")
+                confidence -= 15
+        
+        # Если direction NEUTRAL — устанавливаем по голосам
+        if direction == 'NEUTRAL':
+            direction = votes_direction
+            result['direction'] = direction
+            logger.info(f"  ✅ {symbol} - Направление по голосам: {direction} ({long_votes}L/{short_votes}S)")
+        
+        # Добавляем информацию о голосовании в сигнал
+        result['votes'] = {'long': long_votes, 'short': short_votes}
+        reasons.append(f"🗳 Подтверждений: {long_votes if votes_direction == 'LONG' else short_votes}/{long_votes + short_votes}")
+
         logger.info(f"✅ generate_signal успешно завершен для {symbol}")
         return result
     
