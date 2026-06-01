@@ -6377,7 +6377,7 @@ class MultiTimeframeAnalyzer:
             if fib_analysis['has_confluence']:
                 for signal in fib_analysis['signals']:
                     reasons.append(signal)
-                confidence += fib_analysis['strength'] / 5
+                confidence += fib_analysis['strength'] / 3
                 logger.info(f"  ✅ {symbol} - Фибоначчи: найдено {len(fib_analysis['signals'])} сигналов")
         
         # ===== АНАЛИЗ НАКОПЛЕНИЯ =====
@@ -6532,7 +6532,7 @@ class MultiTimeframeAnalyzer:
             for signal in senior_tf_analysis['signals'][:3]:
                 if signal not in reasons:
                     reasons.append(signal)
-            confidence += senior_tf_analysis['strength'] / 10
+            confidence += senior_tf_analysis['strength'] / 4
             logger.info(f"  ✅ Найдено {len(senior_tf_analysis['levels'])} уровней на старших ТФ")
         else:
             reasons.append("⚠️ Нет совпадений с уровнями на старших ТФ — возможен дальнейший рост")
@@ -6915,7 +6915,7 @@ class MultiTimeframeAnalyzer:
                     # for signal_text in fvg_analysis['signals'][:5]:
                         # reasons.append(signal_text)  # ← было
                         # reasons.insert(0, signal_text)  # ← стало
-                    confidence += fvg_analysis['strength'] / 5
+                    confidence += fvg_analysis['strength'] / 3
                     logger.info(f"  ✅ {symbol} - Найдено FVG: {len(fvg_analysis['zones'])}")
             except Exception as e:
                 logger.error(f"❌ Ошибка в FVG анализе: {e}")
