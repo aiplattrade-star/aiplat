@@ -496,7 +496,7 @@ INDICATOR_WEIGHTS = {
     'vwap': 12,
     'patterns': 15,
     'pump_dump': 25,
-    'fibonacci': 20,
+    'fibonacci': 35,
     'btc_correlation': 8,
     'fvg': 35,
     'imbalance': 35,
