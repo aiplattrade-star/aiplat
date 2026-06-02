@@ -6377,7 +6377,7 @@ class MultiTimeframeAnalyzer:
             if fib_analysis['has_confluence']:
                 for signal in fib_analysis['signals']:
                     reasons.append(signal)
-                confidence += fib_analysis['strength'] / 3
+                confidence += fib_analysis['strength'] / 2
                 logger.info(f"  ✅ {symbol} - Фибоначчи: найдено {len(fib_analysis['signals'])} сигналов")
         
         # ===== АНАЛИЗ НАКОПЛЕНИЯ =====
